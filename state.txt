@@ -1,0 +1,6 @@
+totalVoltage10mV=5328
+current10mAh=8
+remainingCapacity10mAh=8921
+nominalCapacity10mAh=12000
+protectionBitmask=0
+socPrct=15
