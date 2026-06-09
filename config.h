@@ -1,0 +1,23 @@
+#pragma once
+
+#define BAR_LED_0_PIN 2
+#define BAR_LED_1_PIN 5
+#define BAR_LED_2_PIN 12
+#define BAR_LED_3_PIN 13
+#define BAR_LED_4_PIN 14
+#define BAR_LED_5_PIN 15
+#define BAR_LED_6_PIN 18
+#define BAR_LED_7_PIN 19
+#define BAR_LED_8_PIN 21
+#define BAR_LED_9_PIN 22
+
+#define BATTERY_LIGHT_PIN 4
+
+#define BMS_RXD_PIN 16
+#define BMS_TXD_PIN 17
+
+#define BMS_POLL_INTERVAL_MS 3000
+#define BMS_RESPONSE_TIMEOUT_MS 150
+
+#define DISPLAY_FPS 10
+#define DISPLAY_BMS_STALE_AGE_MS 30000
