@@ -15,8 +15,8 @@ struct BMSState {
   uint16_t protectionBitmask;
   uint8_t softwareVersion;
   uint8_t socPrct;
-  bool chargeMosfet;
-  bool dischargeMosfet;
+  bool isChargeMosfetOn;
+  bool isDischargeMosfetOn;
   uint8_t cellCount;
   uint8_t tempSensorCount;
   int16_t tempSensors10C[5];

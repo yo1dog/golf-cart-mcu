@@ -1,33 +1,36 @@
-#include "display.h"
+#include <Arduino.h>
 #include "config.h"
+#include "display.h"
 #include "bms.h"
 
-#define FPS DISPLAY_FPS
+static constexpr uint8_t FPS = DISPLAY_FPS;
+static constexpr uint32_t BMS_STALE_AGE_MS = DISPLAY_BMS_STALE_AGE_MS;
+static constexpr uint32_t REFRESH_INTERVAL_MS = 1000 / FPS;
 
-const uint16_t BAR_LED_0 = 1 << 0;
-const uint16_t BAR_LED_1 = 1 << 1;
-const uint16_t BAR_LED_2 = 1 << 2;
-const uint16_t BAR_LED_3 = 1 << 3;
-const uint16_t BAR_LED_4 = 1 << 4;
-const uint16_t BAR_LED_5 = 1 << 5;
-const uint16_t BAR_LED_6 = 1 << 6;
-const uint16_t BAR_LED_7 = 1 << 7;
-const uint16_t BAR_LED_8 = 1 << 8;
-const uint16_t BAR_LED_9 = 1 << 9;
+static constexpr uint16_t BAR_LED_0 = 1 << 0;
+static constexpr uint16_t BAR_LED_1 = 1 << 1;
+static constexpr uint16_t BAR_LED_2 = 1 << 2;
+static constexpr uint16_t BAR_LED_3 = 1 << 3;
+static constexpr uint16_t BAR_LED_4 = 1 << 4;
+static constexpr uint16_t BAR_LED_5 = 1 << 5;
+static constexpr uint16_t BAR_LED_6 = 1 << 6;
+static constexpr uint16_t BAR_LED_7 = 1 << 7;
+static constexpr uint16_t BAR_LED_8 = 1 << 8;
+static constexpr uint16_t BAR_LED_9 = 1 << 9;
 
-void updateBarDisplay(uint16_t barLEDBitmap);
-void updateBatteryLight(bool enable);
+static void updateBarDisplay(uint16_t barLEDBitmap);
+static void updateBatteryLight(bool enable);
 
-#define ANIM_LOADING  0
-#define ANIM_ERROR    1
-#define ANIM_SOC      2
-#define ANIM_CHARGING 3
+static constexpr uint8_t ANIM_LOADING  = 0;
+static constexpr uint8_t ANIM_ERROR    = 1;
+static constexpr uint8_t ANIM_SOC      = 2;
+static constexpr uint8_t ANIM_CHARGING = 3;
 
-uint8_t lastAnimation = ANIM_LOADING;
-uint32_t frame = -1;
-uint32_t lastFrameTSMS = 0;
+static uint8_t lastAnimation = ANIM_LOADING;
+static uint32_t frame = -1;
+static uint32_t lastFrameTSMS = -REFRESH_INTERVAL_MS;
 
-uint8_t binSOC10(uint8_t socPrct) {
+static uint8_t binSOC10(uint8_t socPrct) {
   // Bin the SoC into 10 segments: 0-9 rounded down.
   uint8_t soc10 = socPrct / 10;
   if (soc10 > 9) soc10 = 9;
@@ -48,11 +51,10 @@ void displaySetup() {
   pinMode(BATTERY_LIGHT_PIN, OUTPUT); digitalWrite(BATTERY_LIGHT_PIN, LOW);
 }
 
-const uint32_t refreshIntervalMS = 1000 / FPS;
 bool displayLoop() {
   // Advance frame at designated FPS rate.
   uint32_t nowTSMS = millis();
-  if ((uint32_t)(nowTSMS - lastFrameTSMS) < refreshIntervalMS) return false;
+  if ((uint32_t)(nowTSMS - lastFrameTSMS) < REFRESH_INTERVAL_MS) return false;
   lastFrameTSMS = nowTSMS;
   ++frame;
   
@@ -63,14 +65,14 @@ bool displayLoop() {
     // If BMS state is not valid or is stale, show loading.
     (
       !bms->isValid ||
-      (uint32_t)(nowTSMS - bms->readTSMS) > DISPLAY_BMS_STALE_AGE_MS // This stale check can wrap.
+      (uint32_t)(nowTSMS - bms->readTSMS) > BMS_STALE_AGE_MS // This stale check can wrap.
     )? ANIM_LOADING :
     
     // If BMS reports an active protection, show error.
     bms->protectionBitmask != 0? ANIM_ERROR :
     
-    // If the current is negative, the battery is being charged. Show charging.
-    bms->current10mAh < 0? ANIM_CHARGING :
+    // If the current is positive, the battery is being charged. Show charging.
+    bms->current10mAh > 0? ANIM_CHARGING :
     
     // Otherwise, show the SoC.
     ANIM_SOC
@@ -114,19 +116,19 @@ bool displayLoop() {
     
     if (frame >= FPS*15) frame = 0;
     if (frame < FPS*5) {
-      // For the first 5 seconds, show SoC.
-      uint8_t soc10 = binSOC10(bms->socPrct);
-      updateBarDisplay(1 << soc10);
-    }
-    else if (frame < FPS*10) {
-      // For the next 5 seconds, display the error low byte on LEDs 0-7 + blink LED 8.
+      // For the first 5 seconds, display the error low byte on LEDs 0-7 + blink LED 8.
       uint8_t bitmaskLowByte = bms->protectionBitmask & 0x00FF;
       updateBarDisplay((blink? BAR_LED_8 : 0) | bitmaskLowByte);
     }
-    else {
+    else if (frame < FPS*10) {
       // For the next 5 seconds, display the error high byte on LEDs 0-7 + blink LED 9.
       uint8_t bitmaskHighByte = (bms->protectionBitmask & 0xFF00) >> 8;
       updateBarDisplay((blink? BAR_LED_9 : 0) | bitmaskHighByte);
+    }
+    else {
+      // For the next 5 seconds, show SoC.
+      uint8_t soc10 = binSOC10(bms->socPrct);
+      updateBarDisplay(1 << soc10);
     }
   }
   else { // Assume animation == ANIM_LOADING
@@ -147,8 +149,8 @@ bool displayLoop() {
   return true;
 }
 
-uint16_t _curBarLEDBitmap = 0;
-void updateBarDisplay(uint16_t barLEDBitmap) {
+static uint16_t _curBarLEDBitmap = 0;
+static void updateBarDisplay(uint16_t barLEDBitmap) {
   // Only write to pins when their values change. TODO: Unnecessary performance optimization?
   if ((barLEDBitmap & BAR_LED_0) != (_curBarLEDBitmap & BAR_LED_0)) digitalWrite(BAR_LED_0_PIN, barLEDBitmap & BAR_LED_0? HIGH : LOW);
   if ((barLEDBitmap & BAR_LED_1) != (_curBarLEDBitmap & BAR_LED_1)) digitalWrite(BAR_LED_1_PIN, barLEDBitmap & BAR_LED_1? HIGH : LOW);
@@ -163,8 +165,8 @@ void updateBarDisplay(uint16_t barLEDBitmap) {
   _curBarLEDBitmap = barLEDBitmap;
 }
 
-bool _curBatteryLight = false;
-void updateBatteryLight(bool enable) {
+static bool _curBatteryLight = false;
+static void updateBatteryLight(bool enable) {
   if (_curBatteryLight == enable) return;
   digitalWrite(BATTERY_LIGHT_PIN, enable? HIGH : LOW);
   _curBatteryLight = enable;
